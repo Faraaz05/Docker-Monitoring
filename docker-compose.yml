@@ -1,0 +1,102 @@
+services:
+  app1:
+    build: 
+      context: ./backend/app1
+    container_name: app1
+    restart: always
+    networks:
+      - backend
+
+  app2:
+    build: 
+      context: ./backend/app2
+    container_name: app2
+    restart: always
+    networks:
+      - backend
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    ports:
+      - "80:80"
+    depends_on:
+      - app1
+      - app2
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./log/nginx:/var/log/nginx
+    networks:
+      - backend
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    networks:
+      - backend
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - backend
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - backend
+
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: loki
+    command: [ "-config.file=/etc/loki/loki-config.yml" ]
+    volumes:
+      - ./monitoring/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - ./loki-data:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - backend
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: promtail
+    command: [ "-config.file=/etc/promtail/promtail-config.yml" ]
+    volumes:
+      - ./monitoring/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/log:/var/log                       # in case you want host logs later
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./log/nginx:/var/log/nginx:ro          # NGINX logs in project
+    networks:
+      - backend
+    depends_on:
+      - loki
+
+
+networks:
+  backend:
+
+volumes:
+  grafana_data:
+
